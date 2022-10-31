@@ -1,14 +1,14 @@
 
 dataset_name = dtu
 datadir = ../data/dtu/dtu_scan105
-expname = tensorf_dtu_scan105_VM
+expname = tensorf_dtu_scan105_SDF_VM
 basedir = ./log
 
-n_iters = 30000
+n_iters = 10000
 batch_size = 4096
 
 N_voxel_init = 2097156 # 128**3
-N_voxel_final = 16777216 # 256**3
+N_voxel_final = 2097156 # 128**3
 upsamp_list = [2000,3000,4000,5500,7000]
 update_AlphaMask_list = [2000,4000]
 
@@ -27,7 +27,8 @@ view_pe = 2
 fea_pe = 2
 pos_pe = 2
 
-TV_weight_density = 0.1
-TV_weight_app = 0.1
+TV_weight_density = 1.0
+TV_weight_app = 1.0
 
 Orient_loss_weight = 0.1
+Eikonal_loss_weight = 0.1

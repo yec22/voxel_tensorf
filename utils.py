@@ -184,7 +184,7 @@ def convert_sdf_samples_to_ply(
     verts, faces, normals, values = skimage.measure.marching_cubes(
         numpy_3d_sdf_tensor, level=level, spacing=voxel_size
     )
-    faces = faces[...,::-1] # inverse face orientation
+    # faces = faces[...,::-1] # inverse face orientation
 
     # transform from voxel coordinates to camera coordinates
     # note x and y are flipped in the output of marching_cubes

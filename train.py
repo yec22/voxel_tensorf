@@ -44,7 +44,7 @@ def export_mesh(args):
     sigma, _ = tensorf.getDenseSigma([512,512,512])
     print(sigma.shape)
     print(sigma.min(), sigma.max())
-    convert_sdf_samples_to_ply(sigma.cpu(), f'{args.ckpt[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=30)
+    convert_sdf_samples_to_ply(sigma.cpu(), f'{args.ckpt[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=0.0)
 
 
 @torch.no_grad()
@@ -177,11 +177,12 @@ def reconstruction(args):
         rays_train, rgb_train = allrays[ray_idx], allrgbs[ray_idx].to(device)
 
         #rgb_map, alphas_map, depth_map, weights, uncertainty
-        rgb_map, alphas_map, depth_map, weights, uncertainty, normal_map, orient_loss, _ = renderer(rays_train, tensorf, chunk=args.batch_size,
+        rgb_map, alphas_map, depth_map, weights, uncertainty, normal_map, orient_loss, eikonal_loss = renderer(rays_train, tensorf, chunk=args.batch_size,
                                 N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray, is_train=True, device=device)
 
         loss = torch.mean((rgb_map - rgb_train) ** 2)
         orient_loss = sum(orient_loss) / len(orient_loss)
+        eikonal_loss = sum(eikonal_loss) / len(eikonal_loss)
 
         # loss
         total_loss = loss
@@ -206,6 +207,8 @@ def reconstruction(args):
             summary_writer.add_scalar('train/reg_tv_app', loss_tv.detach().item(), global_step=iteration)
         if Orient_loss_weight>0:
             total_loss += Orient_loss_weight*orient_loss
+        if Eikonal_loss_weight>0:
+            total_loss += Eikonal_loss_weight*eikonal_loss
 
         optimizer.zero_grad()
         total_loss.backward()
@@ -270,27 +273,27 @@ def reconstruction(args):
     tensorf.save(f'{logfolder}/{args.expname}.th')
 
 
-    if args.render_train:
-        os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)
-        train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
-        PSNRs_test = evaluation(train_dataset,tensorf, args, renderer, f'{logfolder}/imgs_train_all/',
-                                N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
-        print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
+    # if args.render_train:
+    #     os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)
+    #     train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
+    #     PSNRs_test = evaluation(train_dataset,tensorf, args, renderer, f'{logfolder}/imgs_train_all/',
+    #                             N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
+    #     print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
 
-    if args.render_test:
-        os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
-        PSNRs_test = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/imgs_test_all/',
-                                N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
-        summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
-        print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
+    # if args.render_test:
+    #     os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
+    #     PSNRs_test = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/imgs_test_all/',
+    #                             N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
+    #     summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
+    #     print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
 
-    if args.render_path:
-        c2ws = test_dataset.render_path
-        # c2ws = test_dataset.poses
-        print('========>',c2ws.shape)
-        os.makedirs(f'{logfolder}/imgs_path_all', exist_ok=True)
-        evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/imgs_path_all/',
-                                N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
+    # if args.render_path:
+    #     c2ws = test_dataset.render_path
+    #     # c2ws = test_dataset.poses
+    #     print('========>',c2ws.shape)
+    #     os.makedirs(f'{logfolder}/imgs_path_all', exist_ok=True)
+    #     evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/imgs_path_all/',
+    #                             N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
 
 if __name__ == '__main__':
@@ -310,4 +313,3 @@ if __name__ == '__main__':
         render_test(args)
     else:
         reconstruction(args)
-

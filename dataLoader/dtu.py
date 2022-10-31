@@ -40,7 +40,7 @@ class DTUDataset(Dataset):
         self.img_wh = (1600, 1200)
         self.define_transforms()
 
-        self.scene_bbox = torch.tensor([[-1.5, -1.5, -1.5], [1.5, 1.5, 1.5]])
+        self.scene_bbox = torch.tensor([[-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]])
         
         self.read_meta()
 

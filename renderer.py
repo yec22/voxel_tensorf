@@ -22,6 +22,7 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
             depth_map = depth_map.detach()
             normal_map = normal_map.detach()
             orient_loss = orient_loss.detach()
+            grad_loss = grad_loss.detach()
             tensorf.zero_grad()
             torch.cuda.empty_cache()
 

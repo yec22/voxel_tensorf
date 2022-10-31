@@ -140,6 +140,14 @@ class MLPDensity(torch.nn.Module):
 
         return sigma
 
+class SingleVarianceNetwork(torch.nn.Module):
+    def __init__(self, init_val=0.3, device="cuda"):
+        super(SingleVarianceNetwork, self).__init__()
+        self.register_parameter('variance', torch.nn.Parameter(torch.tensor(init_val)))
+        self.device = device
+
+    def forward(self, x):
+        return torch.ones([len(x), 1]).to(self.device) * torch.exp(self.variance * 10.0)
 
 class TensorBase(torch.nn.Module):
     def __init__(self, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 8, sigma_dim = 8,
@@ -167,7 +175,8 @@ class TensorBase(torch.nn.Module):
 
         self.near_far = near_far
         self.step_ratio = step_ratio
-
+        
+        self.deviation_network = SingleVarianceNetwork(init_val=0.3, device=device).to(device)
 
         self.update_stepSize(gridSize)
 
@@ -294,7 +303,7 @@ class TensorBase(torch.nn.Module):
 
     @torch.no_grad()
     def sample_ray(self, rays_o, rays_d, is_train=True, Nsamples=-1):
-        N_samples = 128
+        N_samples = 256
         near, far = self.get_near_far(rays_o, rays_d)
 
         interpx = torch.linspace(0.0, 1.0, N_samples).to(rays_o.device)
@@ -302,23 +311,23 @@ class TensorBase(torch.nn.Module):
         
         rays_pts = rays_o[...,None,:] + rays_d[...,None,:] * interpx[...,None]
 
-        xyz_sampled = self.normalize_coord(rays_pts).reshape(-1, 3)
-        sigma_feat = self.compute_densityfeature(xyz_sampled)
-        sigma_feat = self.densityModule(sigma_feat).squeeze()
-        validsigma = self.feature2density(sigma_feat).reshape(rays_pts.shape[0], rays_pts.shape[1])
+        # xyz_sampled = self.normalize_coord(rays_pts).reshape(-1, 3)
+        # sigma_feat = self.compute_densityfeature(xyz_sampled)
+        # sigma_feat = self.densityModule(sigma_feat).squeeze()
+        # validsigma = sigma_feat.reshape(rays_pts.shape[0], rays_pts.shape[1])
         
-        dists = torch.cat((interpx[:, 1:] - interpx[:, :-1], torch.zeros_like(interpx[:, :1])), dim=-1)
-        _, weights, _ = raw2alpha(validsigma, dists * self.distance_scale)
+        # dists = torch.cat((interpx[:, 1:] - interpx[:, :-1], torch.zeros_like(interpx[:, :1])), dim=-1)
+        # _, weights, _ = self.sdf2alpha(validsigma)
 
-        new_interpx = sample_pdf(interpx, weights[...,:-1], N_samples, det=True)
+        # new_interpx = sample_pdf(interpx, weights[...,:-1], N_samples, det=True)
         
-        z_vals = torch.cat([interpx, new_interpx], dim=-1)
-        z_vals, _ = torch.sort(z_vals, dim=-1)
+        # z_vals = torch.cat([interpx, new_interpx], dim=-1)
+        # z_vals, _ = torch.sort(z_vals, dim=-1)
 
-        rays_pts = rays_o[...,None,:] + rays_d[...,None,:] * z_vals[...,None]
+        # rays_pts = rays_o[...,None,:] + rays_d[...,None,:] * z_vals[...,None]
         mask_outbbox = ((self.aabb[0]>rays_pts) | (rays_pts>self.aabb[1])).any(dim=-1)
 
-        return rays_pts, z_vals, ~mask_outbbox
+        return rays_pts, interpx, ~mask_outbbox
 
 
     def shrink(self, new_aabb, voxel_size):
@@ -339,7 +348,7 @@ class TensorBase(torch.nn.Module):
         # print(self.stepSize, self.distance_scale*self.aabbDiag)
         alpha = torch.zeros_like(dense_xyz[...,0])
         for i in range(gridSize[0]):
-            alpha[i] = self.compute_alpha(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
+            alpha[i] = self.compute_sdf(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
         return alpha, dense_xyz
     
     @torch.no_grad()
@@ -357,7 +366,7 @@ class TensorBase(torch.nn.Module):
         # print(self.stepSize, self.distance_scale*self.aabbDiag)
         alpha = torch.zeros_like(dense_xyz[...,0])
         for i in range(gridSize[0]):
-            alpha[i] = self.compute_sigma(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
+            alpha[i] = self.compute_sdf(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
         return alpha, dense_xyz
 
     @torch.no_grad()
@@ -365,13 +374,12 @@ class TensorBase(torch.nn.Module):
 
         alpha, dense_xyz = self.getDenseAlpha(gridSize)
         dense_xyz = dense_xyz.transpose(0,2).contiguous()
-        alpha = alpha.clamp(0,1).transpose(0,2).contiguous()[None,None]
+        alpha = alpha.transpose(0,2).contiguous()[None,None]
         total_voxels = gridSize[0] * gridSize[1] * gridSize[2]
 
         ks = 3
         alpha = F.max_pool3d(alpha, kernel_size=ks, padding=ks // 2, stride=1).view(gridSize[::-1])
-        alpha[alpha>=self.alphaMask_thres] = 1
-        alpha[alpha<self.alphaMask_thres] = 0
+        alpha[...] = 1
 
         self.alphaMask = AlphaGridMask(self.device, self.aabb, alpha)
 
@@ -426,7 +434,7 @@ class TensorBase(torch.nn.Module):
             return F.relu(density_features)
 
 
-    def compute_alpha(self, xyz_locs, length=1):
+    def compute_sdf(self, xyz_locs, length=1):
 
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_locs)
@@ -441,30 +449,7 @@ class TensorBase(torch.nn.Module):
             xyz_sampled = self.normalize_coord(xyz_locs[alpha_mask])
             sigma_feat = self.compute_densityfeature(xyz_sampled)
             sigma_feat = self.densityModule(sigma_feat).squeeze()
-            validsigma = self.feature2density(sigma_feat)
-            sigma[alpha_mask] = validsigma
-        
-
-        alpha = 1 - torch.exp(-sigma*length).view(xyz_locs.shape[:-1])
-
-        return alpha
-    
-    def compute_sigma(self, xyz_locs, length=1):
-
-        if self.alphaMask is not None:
-            alphas = self.alphaMask.sample_alpha(xyz_locs)
-            alpha_mask = alphas > 0
-        else:
-            alpha_mask = torch.ones_like(xyz_locs[:,0], dtype=bool)
-            
-
-        sigma = torch.zeros(xyz_locs.shape[:-1], device=xyz_locs.device)
-
-        if alpha_mask.any():
-            xyz_sampled = self.normalize_coord(xyz_locs[alpha_mask])
-            sigma_feat = self.compute_densityfeature(xyz_sampled)
-            sigma_feat = self.densityModule(sigma_feat).squeeze()
-            validsigma = self.feature2density(sigma_feat)
+            validsigma = sigma_feat
             sigma[alpha_mask] = validsigma
 
         return sigma
@@ -475,7 +460,7 @@ class TensorBase(torch.nn.Module):
         pts.requires_grad_(True)
         sigma_feat = self.compute_densityfeature(pts)
         sigma_feat = self.densityModule(sigma_feat).squeeze()
-        validsigma = self.feature2density(sigma_feat)
+        validsigma = sigma_feat
         
         d_output = torch.ones_like(validsigma, requires_grad=False, device=pts.device)
         gradients = torch.autograd.grad(
@@ -487,6 +472,29 @@ class TensorBase(torch.nn.Module):
             only_inputs=True)[0]
         
         return gradients
+    
+
+    def sdf2alpha(self, sdf):
+        batch_size, n_samples = sdf.shape
+        inv_s = self.deviation_network(torch.zeros([1, 3]).to(sdf.device))[:, :1].clip(1e-6, 1e6)           # Single parameter
+        inv_s = inv_s.expand(batch_size * n_samples, 1)
+
+        # Estimate signed distances at section points
+        estimated_prev_sdf = torch.cat([sdf[:,:-1], torch.zeros_like(sdf[:,:1])], dim=-1).reshape(-1, 1).to(sdf.device)
+        estimated_next_sdf = torch.cat([sdf[:,1:], torch.zeros_like(sdf[:,:1])], dim=-1).reshape(-1, 1).to(sdf.device)
+
+        prev_cdf = torch.sigmoid(estimated_prev_sdf * inv_s)
+        next_cdf = torch.sigmoid(estimated_next_sdf * inv_s)
+
+        p = prev_cdf - next_cdf
+        c = prev_cdf
+
+        alpha = (p / (c + 1e-6)).reshape(batch_size, n_samples).clip(0.0, 1.0)
+        T = torch.cumprod(torch.cat([torch.ones(alpha.shape[0], 1).to(alpha.device), 1. - alpha + 1e-10], -1), -1)
+
+        weights = alpha * T[:, :-1]  # [N_rays, N_samples]
+        return alpha, weights, T[:,-1:]
+
 
     def forward(self, rays_chunk, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1):
 
@@ -518,19 +526,21 @@ class TensorBase(torch.nn.Module):
         normal_map = torch.zeros(xyz_sampled.shape, device=xyz_sampled.device)
         orient_loss = torch.zeros((xyz_sampled.shape[0], xyz_sampled.shape[1]), device=xyz_sampled.device)
         geo_features = torch.zeros((*xyz_sampled.shape[:2], self.sigma_dim), device=xyz_sampled.device)
+        grad_loss = torch.zeros(1, device=xyz_sampled.device)
         
         if ray_valid.any():
             sigma_feat = self.compute_densityfeature(xyz_sampled[ray_valid])
             geo_features[ray_valid] = sigma_feat
             sigma_feat = self.densityModule(sigma_feat).squeeze()
-            validsigma = self.feature2density(sigma_feat)
+            validsigma = sigma_feat
             sigma[ray_valid] = validsigma
 
             gradients = self.gradient(xyz_sampled[ray_valid])
-            normal = -gradients / (torch.norm(gradients, p=2, dim=-1, keepdim=True) + 1e-8)
+            normal = gradients / (torch.norm(gradients, p=2, dim=-1, keepdim=True) + 1e-8)
             normal_map[ray_valid] = normal # [batch, sample, 3]
+            grad_loss = torch.mean((torch.linalg.norm(gradients, ord=2, dim=-1) - 1.0) ** 2)
 
-        alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
+        alpha, weight, bg_weight = self.sdf2alpha(sigma)
 
         app_mask = weight > self.rayMarch_weight_thres
 
@@ -561,4 +571,4 @@ class TensorBase(torch.nn.Module):
         orient_loss = torch.sum(weight * orient_loss, -1)
         orient_loss = torch.mean(orient_loss)
 
-        return rgb_map, depth_map, normal_map, orient_loss, None
+        return rgb_map, depth_map, normal_map, orient_loss, grad_loss

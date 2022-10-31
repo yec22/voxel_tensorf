@@ -14,7 +14,7 @@ class TensorVMSplit(TensorBase):
         self.basis_mat = torch.nn.Linear(sum(self.app_n_comp), self.app_dim, bias=False).to(device)
 
     def init_volume(self, channel, gridSize, device):
-        feature_volume = [torch.nn.Parameter(torch.randn((1, channel, gridSize[2], gridSize[1], gridSize[0])))]
+        feature_volume = [torch.nn.Parameter(0.1 * torch.randn((1, channel, gridSize[2], gridSize[1], gridSize[0])))]
         return torch.nn.ParameterList(feature_volume).to(device)
 
     def init_one_svd(self, n_component, gridSize, scale, device):
@@ -42,6 +42,7 @@ class TensorVMSplit(TensorBase):
         if isinstance(self.densityModule, torch.nn.Module):
             grad_vars += [{'params':self.densityModule.parameters(), 'lr':lr_init_network}]
         
+        grad_vars += [{'params':self.deviation_network.parameters(), 'lr':lr_init_network}]
         return grad_vars
 
     

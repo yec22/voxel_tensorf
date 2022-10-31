@@ -32,9 +32,9 @@ def config_parser(cmd=None):
 
     # training options
     # learning rate
-    parser.add_argument("--lr_init", type=float, default=0.02,
+    parser.add_argument("--lr_init", type=float, default=0.01,
                         help='learning rate')    
-    parser.add_argument("--lr_basis", type=float, default=1e-3,
+    parser.add_argument("--lr_basis", type=float, default=5e-4,
                         help='learning rate')
     parser.add_argument("--lr_decay_iters", type=int, default=-1,
                         help = 'number of iterations the lr will decay to the target ratio; -1 will set it to n_iters')

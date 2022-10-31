@@ -12,7 +12,7 @@ from dataLoader import dataset_dict
 import sys
 
 
-device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 
 renderer = OctreeRender_trilinear_fast
 
@@ -44,7 +44,7 @@ def export_mesh(args):
     sigma, _ = tensorf.getDenseSigma([512,512,512])
     print(sigma.shape)
     print(sigma.min(), sigma.max())
-    convert_sdf_samples_to_ply(sigma.cpu(), f'{args.ckpt[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=30)
+    convert_sdf_samples_to_ply(sigma.cpu(), f'{args.ckpt[:-3]}.ply',bbox=tensorf.aabb.cpu(), level=20)
 
 
 @torch.no_grad()

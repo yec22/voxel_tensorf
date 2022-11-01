@@ -1,7 +1,7 @@
 
 dataset_name = dtu
-datadir = ../data/dtu/dtu_scan122
-expname = tensorf_dtu_scan122_VM
+datadir = ../data/dtu/dtu_scan114
+expname = tensorf_dtu_scan114_VM
 basedir = ./log
 
 n_iters = 10000
@@ -14,6 +14,8 @@ update_AlphaMask_list = [2000,4000]
 
 N_vis = 5
 vis_every = 10000
+
+radius = 1.0
 
 render_test = 1
 

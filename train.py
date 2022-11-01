@@ -12,7 +12,7 @@ from dataLoader import dataset_dict
 import sys
 
 
-device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
 
 renderer = OctreeRender_trilinear_fast
 
@@ -78,11 +78,6 @@ def render_test(args):
         evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/{args.expname}/imgs_test_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
-    if args.render_path:
-        c2ws = test_dataset.render_path
-        os.makedirs(f'{logfolder}/{args.expname}/imgs_path_all', exist_ok=True)
-        evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/{args.expname}/imgs_path_all/',
-                                N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
 def reconstruction(args):
 
@@ -133,7 +128,8 @@ def reconstruction(args):
         tensorf = eval(args.model_name)(aabb, reso_cur, device,
                     density_n_comp=n_lamb_sigma, appearance_n_comp=n_lamb_sh, app_dim=args.data_dim_color, sigma_dim=args.data_dim_sigma, near_far=near_far,
                     shadingMode=args.shadingMode, alphaMask_thres=args.alpha_mask_thre, density_shift=args.density_shift, distance_scale=args.distance_scale,
-                    pos_pe=args.pos_pe, view_pe=args.view_pe, fea_pe=args.fea_pe, featureC=args.featureC, step_ratio=args.step_ratio, fea2denseAct=args.fea2denseAct)
+                    pos_pe=args.pos_pe, view_pe=args.view_pe, fea_pe=args.fea_pe, featureC=args.featureC, step_ratio=args.step_ratio,
+                    fea2denseAct=args.fea2denseAct, radius=args.radius, sample_ratio=args.sample_ratio)
 
 
     grad_vars = tensorf.get_optparam_groups(args.lr_init, args.lr_basis)
@@ -283,14 +279,6 @@ def reconstruction(args):
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
         summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
-
-    if args.render_path:
-        c2ws = test_dataset.render_path
-        # c2ws = test_dataset.poses
-        print('========>',c2ws.shape)
-        os.makedirs(f'{logfolder}/imgs_path_all', exist_ok=True)
-        evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/imgs_path_all/',
-                                N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
 
 if __name__ == '__main__':

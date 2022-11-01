@@ -86,7 +86,10 @@ def config_parser(cmd=None):
                         help='number of pe for features')
     parser.add_argument("--featureC", type=int, default=128,
                         help='hidden feature channel in MLP')
-    
+    parser.add_argument("--radius", type=float, default=1.0,
+                        help='radius')
+    parser.add_argument("--sample_ratio", type=int, default=1,
+                        help='sample_ratio')
 
 
     parser.add_argument("--ckpt", type=str, default=None,

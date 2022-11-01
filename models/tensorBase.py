@@ -146,7 +146,7 @@ class TensorBase(torch.nn.Module):
                     shadingMode = 'MLP_PE', alphaMask = None, near_far=[2.0,6.0],
                     density_shift = -10, alphaMask_thres=0.001, distance_scale=25, rayMarch_weight_thres=0.0001,
                     pos_pe = 6, view_pe = 6, fea_pe = 6, featureC=128, step_ratio=2.0,
-                    fea2denseAct = 'softplus'):
+                    fea2denseAct = 'softplus', radius = 1.0, sample_ratio = 1):
         super(TensorBase, self).__init__()
 
         self.is_train = True
@@ -159,6 +159,8 @@ class TensorBase(torch.nn.Module):
         self.alphaMask = alphaMask
         self.device=device
         self.fea2denseAct = fea2denseAct
+        self.radius = radius
+        self.sample_ratio = sample_ratio
 
         self.density_shift = density_shift
         self.alphaMask_thres = alphaMask_thres
@@ -288,16 +290,17 @@ class TensorBase(torch.nn.Module):
         a = torch.sum(rays_d**2, dim=-1, keepdim=True)
         b = 2.0 * torch.sum(rays_o * rays_d, dim=-1, keepdim=True)
         mid = 0.5 * (-b) / a
-        near = mid - 1.0
-        far = mid + 1.0
+        near = mid - self.radius
+        far = mid + self.radius
         return near, far
 
     @torch.no_grad()
     def sample_ray(self, rays_o, rays_d, is_train=True, Nsamples=-1):
-        N_samples = 128
+        N_coarse = 128 * self.sample_ratio
+        N_fine = 128
         near, far = self.get_near_far(rays_o, rays_d)
 
-        interpx = torch.linspace(0.0, 1.0, N_samples).to(rays_o.device)
+        interpx = torch.linspace(0.0, 1.0, N_coarse).to(rays_o.device)
         interpx = near + (far - near) * interpx[None, :]
         
         rays_pts = rays_o[...,None,:] + rays_d[...,None,:] * interpx[...,None]
@@ -310,7 +313,7 @@ class TensorBase(torch.nn.Module):
         dists = torch.cat((interpx[:, 1:] - interpx[:, :-1], torch.zeros_like(interpx[:, :1])), dim=-1)
         _, weights, _ = raw2alpha(validsigma, dists * self.distance_scale)
 
-        new_interpx = sample_pdf(interpx, weights[...,:-1], N_samples, det=True)
+        new_interpx = sample_pdf(interpx, weights[...,:-1], N_fine, det=True)
         
         z_vals = torch.cat([interpx, new_interpx], dim=-1)
         z_vals, _ = torch.sort(z_vals, dim=-1)

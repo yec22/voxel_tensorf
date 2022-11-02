@@ -489,7 +489,7 @@ class TensorBase(torch.nn.Module):
         p = prev_cdf - next_cdf
         c = prev_cdf
 
-        alpha = (p / (c + 1e-6)).reshape(batch_size, n_samples).clip(0.0, 1.0)
+        alpha = ((p + 1e-6) / (c + 1e-6)).reshape(batch_size, n_samples).clip(0.0, 1.0)
         T = torch.cumprod(torch.cat([torch.ones(alpha.shape[0], 1).to(alpha.device), 1. - alpha + 1e-10], -1), -1)
 
         weights = alpha * T[:, :-1]  # [N_rays, N_samples]

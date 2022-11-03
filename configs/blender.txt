@@ -4,7 +4,7 @@ datadir = ../data/nerf_synthetic/lego
 expname = tensorf_lego_VM
 basedir = ./log
 
-n_iters = 25000
+n_iters = 30000
 batch_size = 4096
 
 N_voxel_init = 2097156 # 128**3
@@ -13,7 +13,7 @@ upsamp_list = [2000,4000,6000]
 update_AlphaMask_list = [2000,4000]
 
 N_vis = 5
-vis_every = 5000
+vis_every = 10000
 
 render_test = 1
 radius = 1.5
@@ -27,6 +27,7 @@ fea2denseAct = softplus
 
 view_pe = 2
 fea_pe = 2
+featureC = 256
 
 L1_weight_inital = 8e-5
 L1_weight_rest = 4e-5
